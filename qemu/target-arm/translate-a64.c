@@ -86,30 +86,30 @@ void a64_translate_init(struct uc_struct *uc)
     TCGContext *tcg_ctx = uc->tcg_ctx;
     int i;
 
-    tcg_ctx->cpu_pc = tcg_global_mem_new_i64(uc->tcg_ctx, TCG_AREG0,
+    tcg_ctx->cpu_pc = tcg_global_mem_new_i64(uc->tcg_ctx, tcg_ctx->cpu_env,
                                     offsetof(CPUARMState, pc),
                                     "pc");
     for (i = 0; i < 32; i++) {
-        tcg_ctx->cpu_X[i] = tcg_global_mem_new_i64(uc->tcg_ctx, TCG_AREG0,
+        tcg_ctx->cpu_X[i] = tcg_global_mem_new_i64(uc->tcg_ctx, tcg_ctx->cpu_env,
                                           offsetof(CPUARMState, xregs[i]),
                                           regnames[i]);
     }
 
-    tcg_ctx->cpu_NF = tcg_global_mem_new_i32(uc->tcg_ctx, TCG_AREG0, offsetof(CPUARMState, NF), "NF");
-    tcg_ctx->cpu_ZF = tcg_global_mem_new_i32(uc->tcg_ctx, TCG_AREG0, offsetof(CPUARMState, ZF), "ZF");
-    tcg_ctx->cpu_CF = tcg_global_mem_new_i32(uc->tcg_ctx, TCG_AREG0, offsetof(CPUARMState, CF), "CF");
-    tcg_ctx->cpu_VF = tcg_global_mem_new_i32(uc->tcg_ctx, TCG_AREG0, offsetof(CPUARMState, VF), "VF");
+    tcg_ctx->cpu_NF = tcg_global_mem_new_i32(uc->tcg_ctx, tcg_ctx->cpu_env, offsetof(CPUARMState, NF), "NF");
+    tcg_ctx->cpu_ZF = tcg_global_mem_new_i32(uc->tcg_ctx, tcg_ctx->cpu_env, offsetof(CPUARMState, ZF), "ZF");
+    tcg_ctx->cpu_CF = tcg_global_mem_new_i32(uc->tcg_ctx, tcg_ctx->cpu_env, offsetof(CPUARMState, CF), "CF");
+    tcg_ctx->cpu_VF = tcg_global_mem_new_i32(uc->tcg_ctx, tcg_ctx->cpu_env, offsetof(CPUARMState, VF), "VF");
 
-    tcg_ctx->cpu_exclusive_addr = tcg_global_mem_new_i64(uc->tcg_ctx, TCG_AREG0,
+    tcg_ctx->cpu_exclusive_addr = tcg_global_mem_new_i64(uc->tcg_ctx, tcg_ctx->cpu_env,
         offsetof(CPUARMState, exclusive_addr), "exclusive_addr");
-    tcg_ctx->cpu_exclusive_val = tcg_global_mem_new_i64(uc->tcg_ctx, TCG_AREG0,
+    tcg_ctx->cpu_exclusive_val = tcg_global_mem_new_i64(uc->tcg_ctx, tcg_ctx->cpu_env,
         offsetof(CPUARMState, exclusive_val), "exclusive_val");
-    tcg_ctx->cpu_exclusive_high = tcg_global_mem_new_i64(uc->tcg_ctx, TCG_AREG0,
+    tcg_ctx->cpu_exclusive_high = tcg_global_mem_new_i64(uc->tcg_ctx, tcg_ctx->cpu_env,
         offsetof(CPUARMState, exclusive_high), "exclusive_high");
 #ifdef CONFIG_USER_ONLY
-    cpu_exclusive_test = tcg_global_mem_new_i64(uc->tcg_ctx, TCG_AREG0,
+    cpu_exclusive_test = tcg_global_mem_new_i64(uc->tcg_ctx, tcg_ctx->cpu_env,
         offsetof(CPUARMState, exclusive_test), "exclusive_test");
-    cpu_exclusive_info = tcg_global_mem_new_i32(uc->tcg_ctx, TCG_AREG0,
+    cpu_exclusive_info = tcg_global_mem_new_i32(uc->tcg_ctx, tcg_ctx->cpu_env,
         offsetof(CPUARMState, exclusive_info), "exclusive_info");
 #endif
 }
@@ -143,15 +143,12 @@ void aarch64_cpu_dump_state(CPUState *cs, FILE *f,
 
     if (flags & CPU_DUMP_FPU) {
         int numvfpregs = 32;
-        for (i = 0; i < numvfpregs; i += 2) {
-            uint64_t vlo = float64_val(env->vfp.regs[i * 2]);
-            uint64_t vhi = float64_val(env->vfp.regs[(i * 2) + 1]);
-            cpu_fprintf(f, "q%02d=%016" PRIx64 ":%016" PRIx64 " ",
-                        i, vhi, vlo);
-            vlo = float64_val(env->vfp.regs[(i + 1) * 2]);
-            vhi = float64_val(env->vfp.regs[((i + 1) * 2) + 1]);
-            cpu_fprintf(f, "q%02d=%016" PRIx64 ":%016" PRIx64 "\n",
-                        i + 1, vhi, vlo);
+        for (i = 0; i < numvfpregs; i++) {
+            uint64_t *q = aa64_vfp_qreg(env, i);
+            uint64_t vlo = q[0];
+            uint64_t vhi = q[1];
+            cpu_fprintf(f, "q%02d=%016" PRIx64 ":%016" PRIx64 "%c",
+                        i, vhi, vlo, (i & 1 ? '\n' : ' '));
         }
         cpu_fprintf(f, "FPCR: %08x  FPSR: %08x\n",
                     vfp_get_fpcr(env), vfp_get_fpsr(env));
@@ -283,7 +280,7 @@ static void unallocated_encoding(DisasContext *s)
                       "at pc=%016" PRIx64 "\n",                          \
                       __FILE__, __LINE__, insn, s->pc - 4);              \
         unallocated_encoding(s);                                         \
-    } while (0);
+    } while (0)
 
 static void init_tmp_a64_array(DisasContext *s)
 {
@@ -434,19 +431,13 @@ static inline int vec_reg_offset(DisasContext *s, int regno,
  */
 static inline int fp_reg_offset(DisasContext *s, int regno, TCGMemOp size)
 {
-    int offs = offsetof(CPUARMState, vfp.regs[regno * 2]);
-#ifdef HOST_WORDS_BIGENDIAN
-    offs += (8 - (1 << size));
-#endif
-    assert_fp_access_checked(s);
-    return offs;
+    return vec_reg_offset(s, regno, 0, size);
 }
 
 /* Offset of the high half of the 128 bit vector Qn */
 static inline int fp_reg_hi_offset(DisasContext *s, int regno)
 {
-    assert_fp_access_checked(s);
-    return offsetof(CPUARMState, vfp.regs[regno * 2 + 1]);
+    return vec_reg_offset(s, regno, 1, MO_64);
 }
 
 /* Convenience accessors for reading and writing single and double
@@ -1104,7 +1095,7 @@ static void disas_comp_b_imm(DisasContext *s, uint32_t insn)
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
     unsigned int sf, op, rt;
     uint64_t addr;
-    int label_match;
+    TCGLabel *label_match;
     TCGv_i64 tcg_cmp;
 
     sf = extract32(insn, 31, 1);
@@ -1134,7 +1125,7 @@ static void disas_test_b_imm(DisasContext *s, uint32_t insn)
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
     unsigned int bit_pos, op, rt;
     uint64_t addr;
-    int label_match;
+    TCGLabel *label_match;
     TCGv_i64 tcg_cmp;
 
     bit_pos = (extract32(insn, 31, 1) << 5) | extract32(insn, 19, 5);
@@ -1174,7 +1165,7 @@ static void disas_cond_b_imm(DisasContext *s, uint32_t insn)
 
     if (cond < 0x0e) {
         /* genuinely conditional branches */
-        int label_match = gen_new_label(tcg_ctx);
+        TCGLabel *label_match = gen_new_label(tcg_ctx);
         arm_gen_test_cc(tcg_ctx, cond, label_match);
         gen_goto_tb(s, 0, s->pc);
         gen_set_label(tcg_ctx, label_match);
@@ -1720,8 +1711,8 @@ static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
      * }
      * env->exclusive_addr = -1;
      */
-    int fail_label = gen_new_label(tcg_ctx);
-    int done_label = gen_new_label(tcg_ctx);
+    TCGLabel *fail_label = gen_new_label(tcg_ctx);
+    TCGLabel *done_label = gen_new_label(tcg_ctx);
     TCGv_i64 addr = tcg_temp_local_new_i64(tcg_ctx);
     TCGv_i64 tmp;
 
@@ -1783,13 +1774,9 @@ static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
  *  o2: 0 -> exclusive, 1 -> not
  *  o1: 0 -> single register, 1 -> register pair
  *  o0: 1 -> load-acquire/store-release, 0 -> not
- *
- *  o0 == 0 AND o2 == 1 is un-allocated
- *  o1 == 1 is un-allocated except for 32 and 64 bit sizes
  */
 static void disas_ldst_excl(DisasContext *s, uint32_t insn)
 {
-    TCGContext *tcg_ctx = s->uc->tcg_ctx;
     int rt = extract32(insn, 0, 5);
     int rn = extract32(insn, 5, 5);
     int rt2 = extract32(insn, 10, 5);
@@ -1801,7 +1788,8 @@ static void disas_ldst_excl(DisasContext *s, uint32_t insn)
     int size = extract32(insn, 30, 2);
     TCGv_i64 tcg_addr;
 
-    if ((!is_excl && !is_lasr) ||
+    if ((!is_excl && !is_pair && !is_lasr) ||
+        (!is_excl && is_pair) ||
         (is_pair && size < 2)) {
         unallocated_encoding(s);
         return;
@@ -1829,15 +1817,6 @@ static void disas_ldst_excl(DisasContext *s, uint32_t insn)
             do_gpr_st(s, tcg_rt, tcg_addr, size);
         } else {
             do_gpr_ld(s, tcg_rt, tcg_addr, size, false, false);
-        }
-        if (is_pair) {
-            TCGv_i64 tcg_rt2 = cpu_reg(s, rt);
-            tcg_gen_addi_i64(tcg_ctx, tcg_addr, tcg_addr, 1ULL << size);
-            if (is_store) {
-                do_gpr_st(s, tcg_rt2, tcg_addr, size);
-            } else {
-                do_gpr_ld(s, tcg_rt2, tcg_addr, size, false, false);
-            }
         }
     }
 }
@@ -2007,29 +1986,34 @@ static void disas_ldst_pair(DisasContext *s, uint32_t insn)
         } else {
             do_fp_st(s, rt, tcg_addr, size);
         }
-    } else {
-        TCGv_i64 tcg_rt = cpu_reg(s, rt);
-        if (is_load) {
-            do_gpr_ld(s, tcg_rt, tcg_addr, size, is_signed, false);
-        } else {
-            do_gpr_st(s, tcg_rt, tcg_addr, size);
-        }
-    }
-    tcg_gen_addi_i64(tcg_ctx, tcg_addr, tcg_addr, 1ULL << size);
-    if (is_vector) {
+        tcg_gen_addi_i64(tcg_ctx, tcg_addr, tcg_addr, 1 << size);
         if (is_load) {
             do_fp_ld(s, rt2, tcg_addr, size);
         } else {
             do_fp_st(s, rt2, tcg_addr, size);
         }
     } else {
+        TCGv_i64 tcg_rt = cpu_reg(s, rt);
         TCGv_i64 tcg_rt2 = cpu_reg(s, rt2);
+
         if (is_load) {
+            TCGv_i64 tmp = tcg_temp_new_i64(tcg_ctx);
+
+            /* Do not modify tcg_rt before recognizing any exception
+             * from the second load.
+             */
+            do_gpr_ld(s, tmp, tcg_addr, size, is_signed, false);
+            tcg_gen_addi_i64(tcg_ctx, tcg_addr, tcg_addr, 1 << size);
             do_gpr_ld(s, tcg_rt2, tcg_addr, size, is_signed, false);
+
+            tcg_gen_mov_i64(tcg_ctx, tcg_rt, tmp);
+            tcg_temp_free_i64(tcg_ctx, tmp);
         } else {
+            do_gpr_st(s, tcg_rt, tcg_addr, size);
+            tcg_gen_addi_i64(tcg_ctx, tcg_addr, tcg_addr, 1 << size);
             do_gpr_st(s, tcg_rt2, tcg_addr, size);
         }
-    }
+}
 
     if (wback) {
         if (postindex) {
@@ -3562,7 +3546,7 @@ static void disas_cc(DisasContext *s, uint32_t insn)
 {
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
     unsigned int sf, op, y, cond, rn, nzcv, is_imm;
-    int label_continue = -1;
+    TCGLabel *label_continue = NULL;
     TCGv_i64 tcg_tmp, tcg_y, tcg_rn;
 
     if (!extract32(insn, 29, 1)) {
@@ -3582,7 +3566,7 @@ static void disas_cc(DisasContext *s, uint32_t insn)
     nzcv = extract32(insn, 0, 4);
 
     if (cond < 0x0e) { /* not always */
-        int label_match = gen_new_label(tcg_ctx);
+        TCGLabel *label_match = gen_new_label(tcg_ctx);
         label_continue = gen_new_label(tcg_ctx);
         arm_gen_test_cc(tcg_ctx, cond, label_match);
         /* nomatch: */
@@ -3656,8 +3640,8 @@ static void disas_cond_select(DisasContext *s, uint32_t insn)
         /* OPTME: we could use movcond here, at the cost of duplicating
          * a lot of the arm_gen_test_cc() logic.
          */
-        int label_match = gen_new_label(tcg_ctx);
-        int label_continue = gen_new_label(tcg_ctx);
+        TCGLabel *label_match = gen_new_label(tcg_ctx);
+        TCGLabel *label_continue = gen_new_label(tcg_ctx);
 
         arm_gen_test_cc(tcg_ctx, cond, label_match);
         /* nomatch: */
@@ -3789,26 +3773,15 @@ static void handle_rev16(DisasContext *s, unsigned int sf,
     TCGv_i64 tcg_rd = cpu_reg(s, rd);
     TCGv_i64 tcg_tmp = tcg_temp_new_i64(tcg_ctx);
     TCGv_i64 tcg_rn = read_cpu_reg(s, rn, sf);
+    TCGv_i64 mask = tcg_const_i64(tcg_ctx, sf ? 0x00ff00ff00ff00ffull : 0x00ff00ff);
 
-    tcg_gen_andi_i64(tcg_ctx, tcg_tmp, tcg_rn, 0xffff);
-    tcg_gen_bswap16_i64(tcg_ctx, tcg_rd, tcg_tmp);
+    tcg_gen_shri_i64(tcg_ctx, tcg_tmp, tcg_rn, 8);
+    tcg_gen_and_i64(tcg_ctx, tcg_rd, tcg_rn, mask);
+    tcg_gen_and_i64(tcg_ctx, tcg_tmp, tcg_tmp, mask);
+    tcg_gen_shli_i64(tcg_ctx, tcg_rd, tcg_rd, 8);
+    tcg_gen_or_i64(tcg_ctx, tcg_rd, tcg_rd, tcg_tmp);
 
-    tcg_gen_shri_i64(tcg_ctx, tcg_tmp, tcg_rn, 16);
-    tcg_gen_andi_i64(tcg_ctx, tcg_tmp, tcg_tmp, 0xffff);
-    tcg_gen_bswap16_i64(tcg_ctx, tcg_tmp, tcg_tmp);
-    tcg_gen_deposit_i64(tcg_ctx, tcg_rd, tcg_rd, tcg_tmp, 16, 16);
-
-    if (sf) {
-        tcg_gen_shri_i64(tcg_ctx, tcg_tmp, tcg_rn, 32);
-        tcg_gen_andi_i64(tcg_ctx, tcg_tmp, tcg_tmp, 0xffff);
-        tcg_gen_bswap16_i64(tcg_ctx, tcg_tmp, tcg_tmp);
-        tcg_gen_deposit_i64(tcg_ctx, tcg_rd, tcg_rd, tcg_tmp, 32, 16);
-
-        tcg_gen_shri_i64(tcg_ctx, tcg_tmp, tcg_rn, 48);
-        tcg_gen_bswap16_i64(tcg_ctx, tcg_tmp, tcg_tmp);
-        tcg_gen_deposit_i64(tcg_ctx, tcg_rd, tcg_rd, tcg_tmp, 48, 16);
-    }
-
+    tcg_temp_free_i64(tcg_ctx, mask);
     tcg_temp_free_i64(tcg_ctx, tcg_tmp);
 }
 
@@ -4141,7 +4114,7 @@ static void disas_fp_ccomp(DisasContext *s, uint32_t insn)
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
     unsigned int mos, type, rm, cond, rn, op, nzcv;
     TCGv_i64 tcg_flags;
-    int label_continue = -1;
+    TCGLabel *label_continue = NULL;
 
     mos = extract32(insn, 29, 3);
     type = extract32(insn, 22, 2); /* 0 = single, 1 = double */
@@ -4161,7 +4134,7 @@ static void disas_fp_ccomp(DisasContext *s, uint32_t insn)
     }
 
     if (cond < 0x0e) { /* not always */
-        int label_match = gen_new_label(tcg_ctx);
+        TCGLabel *label_match = gen_new_label(tcg_ctx);
         label_continue = gen_new_label(tcg_ctx);
         arm_gen_test_cc(tcg_ctx, cond, label_match);
         /* nomatch: */
@@ -4204,7 +4177,7 @@ static void disas_fp_csel(DisasContext *s, uint32_t insn)
 {
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
     unsigned int mos, type, rm, cond, rn, rd;
-    int label_continue = -1;
+    TCGLabel *label_continue = NULL;
 
     mos = extract32(insn, 29, 3);
     type = extract32(insn, 22, 2); /* 0 = single, 1 = double */
@@ -4223,7 +4196,7 @@ static void disas_fp_csel(DisasContext *s, uint32_t insn)
     }
 
     if (cond < 0x0e) { /* not always */
-        int label_match = gen_new_label(tcg_ctx);
+        TCGLabel *label_match = gen_new_label(tcg_ctx);
         label_continue = gen_new_label(tcg_ctx);
         arm_gen_test_cc(tcg_ctx, cond, label_match);
         /* nomatch: */
@@ -4735,6 +4708,38 @@ static void disas_fp_3src(DisasContext *s, uint32_t insn)
     }
 }
 
+/* The imm8 encodes the sign bit, enough bits to represent an exponent in
+ * the range 01....1xx to 10....0xx, and the most significant 4 bits of
+ * the mantissa; see VFPExpandImm() in the v8 ARM ARM.
+ */
+static uint64_t vfp_expand_imm(int size, uint8_t imm8)
+{
+    uint64_t imm;
+
+    switch (size) {
+    case MO_64:
+        imm = (extract32(imm8, 7, 1) ? 0x8000 : 0) |
+            (extract32(imm8, 6, 1) ? 0x3fc0 : 0x4000) |
+            extract32(imm8, 0, 6);
+        imm <<= 48;
+        break;
+    case MO_32:
+        imm = (extract32(imm8, 7, 1) ? 0x8000 : 0) |
+            (extract32(imm8, 6, 1) ? 0x3e00 : 0x4000) |
+            (extract32(imm8, 0, 6) << 3);
+        imm <<= 16;
+        break;
+    case MO_16:
+        imm = (extract32(imm8, 7, 1) ? 0x8000 : 0) |
+            (extract32(imm8, 6, 1) ? 0x3000 : 0x4000) |
+            (extract32(imm8, 0, 6) << 6);
+        break;
+    default:
+        g_assert_not_reached();
+    }
+    return imm;
+}
+
 /* C3.6.28 Floating point immediate
  *   31  30  29 28       24 23  22  21 20        13 12   10 9    5 4    0
  * +---+---+---+-----------+------+---+------------+-------+------+------+
@@ -4759,22 +4764,7 @@ static void disas_fp_imm(DisasContext *s, uint32_t insn)
         return;
     }
 
-    /* The imm8 encodes the sign bit, enough bits to represent
-     * an exponent in the range 01....1xx to 10....0xx,
-     * and the most significant 4 bits of the mantissa; see
-     * VFPExpandImm() in the v8 ARM ARM.
-     */
-    if (is_double) {
-        imm = (extract32(imm8, 7, 1) ? 0x8000 : 0) |
-            (extract32(imm8, 6, 1) ? 0x3fc0 : 0x4000) |
-            extract32(imm8, 0, 6);
-        imm <<= 48;
-    } else {
-        imm = (extract32(imm8, 7, 1) ? 0x8000 : 0) |
-            (extract32(imm8, 6, 1) ? 0x3e00 : 0x4000) |
-            (extract32(imm8, 0, 6) << 3);
-        imm <<= 16;
-    }
+    imm = vfp_expand_imm(MO_32 + is_double, imm8);
 
     tcg_res = tcg_const_i64(tcg_ctx, imm);
     write_fp_dreg(s, rd, tcg_res);
@@ -11093,7 +11083,6 @@ void gen_intermediate_code_internal_a64(ARMCPU *cpu,
     CPUARMState *env = &cpu->env;
     DisasContext dc1, *dc = &dc1;
     CPUBreakpoint *bp;
-    uint16_t *gen_opc_end;
     int j, lj;
     target_ulong pc_start;
     target_ulong next_page_start;
@@ -11106,8 +11095,6 @@ void gen_intermediate_code_internal_a64(ARMCPU *cpu,
 
     dc->uc = env->uc;
     dc->tb = tb;
-
-    gen_opc_end = tcg_ctx->gen_opc_buf + OPC_MAX_SIZE;
 
     dc->is_jmp = DISAS_NEXT;
     dc->pc = pc_start;
@@ -11179,7 +11166,7 @@ void gen_intermediate_code_internal_a64(ARMCPU *cpu,
     if (!env->uc->block_full && HOOK_EXISTS_BOUNDED(env->uc, UC_HOOK_BLOCK, pc_start)) {
         // save block address to see if we need to patch block size later
         env->uc->block_addr = pc_start;
-        env->uc->size_arg = tcg_ctx->gen_opparam_buf - tcg_ctx->gen_opparam_ptr + 1;
+        env->uc->size_arg = tcg_ctx->gen_op_buf[tcg_ctx->gen_last_op_idx].args;
         gen_uc_tracecode(tcg_ctx, 0xf8f8f8f8, UC_HOOK_BLOCK_IDX, env->uc, pc_start);
     } else {
         env->uc->size_arg = -1;
@@ -11201,7 +11188,7 @@ void gen_intermediate_code_internal_a64(ARMCPU *cpu,
         }
 
         if (search_pc) {
-            j = tcg_ctx->gen_opc_ptr - tcg_ctx->gen_opc_buf;
+            j = tcg_op_buf_count(tcg_ctx);
             if (lj < j) {
                 lj++;
                 while (lj < j) {
@@ -11251,14 +11238,14 @@ void gen_intermediate_code_internal_a64(ARMCPU *cpu,
          * ensures prefetch aborts occur at the right place.
          */
         num_insns++;
-    } while (!dc->is_jmp && tcg_ctx->gen_opc_ptr < gen_opc_end &&
+    } while (!dc->is_jmp && !tcg_op_buf_full(tcg_ctx) &&
              !cs->singlestep_enabled &&
              !dc->ss_active &&
              dc->pc < next_page_start &&
              num_insns < max_insns);
 
     /* if too long translation, save this info */
-    if (tcg_ctx->gen_opc_ptr >= gen_opc_end || num_insns >= max_insns) {
+    if (tcg_op_buf_full(tcg_ctx) || num_insns >= max_insns) {
         block_full = true;
     }
 
@@ -11316,10 +11303,9 @@ tb_end:
 
 done_generating:
     gen_tb_end(tcg_ctx, tb, num_insns);
-    *tcg_ctx->gen_opc_ptr = INDEX_op_end;
 
     if (search_pc) {
-        j = tcg_ctx->gen_opc_ptr - tcg_ctx->gen_opc_buf;
+        j = tcg_op_buf_count(tcg_ctx);
         lj++;
         while (lj <= j) {
             tcg_ctx->gen_opc_instr_start[lj++] = 0;

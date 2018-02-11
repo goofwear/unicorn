@@ -635,7 +635,7 @@ static void tcg_out_setcond(TCGContext *s, TCGCond cond, TCGReg ret,
 }
 
 static void tcg_out_brcond(TCGContext *s, TCGCond cond, TCGReg arg1,
-                           TCGReg arg2, int label_index)
+                           TCGReg arg2, TCGLabel *l)
 {
     static const MIPSInsn b_zero[16] = {
         [TCG_COND_LT] = OPC_BLTZ,
@@ -644,7 +644,6 @@ static void tcg_out_brcond(TCGContext *s, TCGCond cond, TCGReg arg1,
         [TCG_COND_GE] = OPC_BGEZ,
     };
 
-    TCGLabel *l;
     MIPSInsn s_opc = OPC_SLTU;
     MIPSInsn b_opc;
     int cmp_map;
@@ -692,11 +691,10 @@ static void tcg_out_brcond(TCGContext *s, TCGCond cond, TCGReg arg1,
     }
 
     tcg_out_opc_br(s, b_opc, arg1, arg2);
-    l = &s->labels[label_index];
     if (l->has_value) {
         reloc_pc16(s->code_ptr - 1, l->u.value_ptr);
     } else {
-        tcg_out_reloc(s, s->code_ptr - 1, R_MIPS_PC16, label_index, 0);
+        tcg_out_reloc(s, s->code_ptr - 1, R_MIPS_PC16, l, 0);
     }
     tcg_out_nop(s);
 }
@@ -765,7 +763,7 @@ static void tcg_out_setcond2(TCGContext *s, TCGCond cond, TCGReg ret,
 }
 
 static void tcg_out_brcond2(TCGContext *s, TCGCond cond, TCGReg al, TCGReg ah,
-                            TCGReg bl, TCGReg bh, int label_index)
+                            TCGReg bl, TCGReg bh, TCGLabel *l)
 {
     TCGCond b_cond = TCG_COND_NE;
     TCGReg tmp = TCG_TMP1;
@@ -790,7 +788,7 @@ static void tcg_out_brcond2(TCGContext *s, TCGCond cond, TCGReg al, TCGReg ah,
         break;
     }
 
-    tcg_out_brcond(s, b_cond, tmp, TCG_REG_ZERO, label_index);
+    tcg_out_brcond(s, b_cond, tmp, TCG_REG_ZERO, l);
 }
 
 static void tcg_out_movcond(TCGContext *s, TCGCond cond, TCGReg ret,
@@ -1152,6 +1150,7 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, bool is_64)
 {
     TCGReg addr_regl, addr_regh QEMU_UNUSED_VAR;
     TCGReg data_regl, data_regh;
+    TCGMemOpIdx oi;
     TCGMemOp opc;
 #if defined(CONFIG_SOFTMMU)
     tcg_insn_unit *label_ptr[2];
@@ -1166,10 +1165,11 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args, bool is_64)
     data_regh = (is_64 ? *args++ : 0);
     addr_regl = *args++;
     addr_regh = (TARGET_LONG_BITS == 64 ? *args++ : 0);
-    opc = *args++;
+    oi = *args++;
+    opc = get_memop(oi);
 
 #if defined(CONFIG_SOFTMMU)
-    mem_index = *args;
+    mem_index = get_mmuidx(oi);
     s_bits = opc & MO_SIZE;
 
     tcg_out_tlb_load(s, base, addr_regl, addr_regh, mem_index,
@@ -1281,6 +1281,7 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is_64)
 {
     TCGReg addr_regl, addr_regh QEMU_UNUSED_VAR;
     TCGReg data_regl, data_regh, base;
+    TCGMemOpIdx oi;
     TCGMemOp opc;
 #if defined(CONFIG_SOFTMMU)
     tcg_insn_unit *label_ptr[2];
@@ -1292,10 +1293,11 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args, bool is_64)
     data_regh = (is_64 ? *args++ : 0);
     addr_regl = *args++;
     addr_regh = (TARGET_LONG_BITS == 64 ? *args++ : 0);
-    opc = *args++;
+    oi = *args++;
+    opc = get_memop(oi);
 
 #if defined(CONFIG_SOFTMMU)
-    mem_index = *args;
+    mem_index = get_mmuidx(oi);
     s_bits = opc & 3;
 
     /* Note that we eliminated the helper's address argument,
@@ -1367,7 +1369,8 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         s->tb_next_offset[a0] = tcg_current_code_size(s);
         break;
     case INDEX_op_br:
-        tcg_out_brcond(s, TCG_COND_EQ, TCG_REG_ZERO, TCG_REG_ZERO, a0);
+        tcg_out_brcond(s, TCG_COND_EQ, TCG_REG_ZERO, TCG_REG_ZERO,
+                       arg_label(s, a0));
         break;
 
     case INDEX_op_ld8u_i32:
@@ -1527,10 +1530,10 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         break;
 
     case INDEX_op_brcond_i32:
-        tcg_out_brcond(s, a2, a0, a1, args[3]);
+        tcg_out_brcond(s, a2, a0, a1, arg_label(s, args[3]));
         break;
     case INDEX_op_brcond2_i32:
-        tcg_out_brcond2(s, args[4], a0, a1, a2, args[3], args[5]);
+        tcg_out_brcond2(s, args[4], a0, a1, a2, args[3], arg_label(s, args[5]));
         break;
 
     case INDEX_op_movcond_i32:

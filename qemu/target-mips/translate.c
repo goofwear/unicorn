@@ -2005,8 +2005,8 @@ static inline void op_st_##insn(DisasContext *s, TCGv arg1, TCGv arg2, int rt, D
 {                                                                            \
     TCGContext *tcg_ctx = s->uc->tcg_ctx; \
     TCGv t0 = tcg_temp_new(tcg_ctx);                                                \
-    int l1 = gen_new_label(tcg_ctx);                                                \
-    int l2 = gen_new_label(tcg_ctx);                                                \
+    TCGLabel *l1 = gen_new_label(tcg_ctx);                                                \
+    TCGLabel *l2 = gen_new_label(tcg_ctx);                                                \
                                                                              \
     tcg_gen_andi_tl(tcg_ctx, t0, arg2, almask);                                       \
     tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_EQ, t0, 0, l1);                              \
@@ -2436,7 +2436,7 @@ static void gen_arith_imm(DisasContext *ctx, uint32_t opc,
             TCGv t0 = tcg_temp_local_new(tcg_ctx);
             TCGv t1 = tcg_temp_new(tcg_ctx);
             TCGv t2 = tcg_temp_new(tcg_ctx);
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
 
             gen_load_gpr(ctx, t1, rs);
             tcg_gen_addi_tl(tcg_ctx, t0, t1, uimm);
@@ -2472,7 +2472,7 @@ static void gen_arith_imm(DisasContext *ctx, uint32_t opc,
             TCGv t0 = tcg_temp_local_new(tcg_ctx);
             TCGv t1 = tcg_temp_new(tcg_ctx);
             TCGv t2 = tcg_temp_new(tcg_ctx);
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
 
             gen_load_gpr(ctx, t1, rs);
             tcg_gen_addi_tl(tcg_ctx, t0, t1, uimm);
@@ -2710,7 +2710,7 @@ static void gen_arith(DisasContext *ctx, uint32_t opc,
             TCGv t0 = tcg_temp_local_new(tcg_ctx);
             TCGv t1 = tcg_temp_new(tcg_ctx);
             TCGv t2 = tcg_temp_new(tcg_ctx);
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
 
             gen_load_gpr(ctx, t1, rs);
             gen_load_gpr(ctx, t2, rt);
@@ -2748,7 +2748,7 @@ static void gen_arith(DisasContext *ctx, uint32_t opc,
             TCGv t0 = tcg_temp_local_new(tcg_ctx);
             TCGv t1 = tcg_temp_new(tcg_ctx);
             TCGv t2 = tcg_temp_new(tcg_ctx);
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
 
             gen_load_gpr(ctx, t1, rs);
             gen_load_gpr(ctx, t2, rt);
@@ -2788,7 +2788,7 @@ static void gen_arith(DisasContext *ctx, uint32_t opc,
             TCGv t0 = tcg_temp_local_new(tcg_ctx);
             TCGv t1 = tcg_temp_new(tcg_ctx);
             TCGv t2 = tcg_temp_new(tcg_ctx);
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
 
             gen_load_gpr(ctx, t1, rs);
             gen_load_gpr(ctx, t2, rt);
@@ -2824,7 +2824,7 @@ static void gen_arith(DisasContext *ctx, uint32_t opc,
             TCGv t0 = tcg_temp_local_new(tcg_ctx);
             TCGv t1 = tcg_temp_new(tcg_ctx);
             TCGv t2 = tcg_temp_new(tcg_ctx);
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
 
             gen_load_gpr(ctx, t1, rs);
             gen_load_gpr(ctx, t2, rt);
@@ -3887,9 +3887,9 @@ static void gen_loongson_integer(DisasContext *ctx, uint32_t opc,
     case OPC_DIV_G_2E:
     case OPC_DIV_G_2F:
         {
-            int l1 = gen_new_label(tcg_ctx);
-            int l2 = gen_new_label(tcg_ctx);
-            int l3 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l2 = gen_new_label(tcg_ctx);
+            TCGLabel *l3 = gen_new_label(tcg_ctx);
             tcg_gen_ext32s_tl(tcg_ctx, t0, t0);
             tcg_gen_ext32s_tl(tcg_ctx, t1, t1);
             tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_NE, t1, 0, l1);
@@ -3910,8 +3910,8 @@ static void gen_loongson_integer(DisasContext *ctx, uint32_t opc,
     case OPC_DIVU_G_2E:
     case OPC_DIVU_G_2F:
         {
-            int l1 = gen_new_label(tcg_ctx);
-            int l2 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l2 = gen_new_label(tcg_ctx);
             tcg_gen_ext32u_tl(tcg_ctx, t0, t0);
             tcg_gen_ext32u_tl(tcg_ctx, t1, t1);
             tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_NE, t1, 0, l1);
@@ -3927,9 +3927,9 @@ static void gen_loongson_integer(DisasContext *ctx, uint32_t opc,
     case OPC_MOD_G_2E:
     case OPC_MOD_G_2F:
         {
-            int l1 = gen_new_label(tcg_ctx);
-            int l2 = gen_new_label(tcg_ctx);
-            int l3 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l2 = gen_new_label(tcg_ctx);
+            TCGLabel *l3 = gen_new_label(tcg_ctx);
             tcg_gen_ext32u_tl(tcg_ctx, t0, t0);
             tcg_gen_ext32u_tl(tcg_ctx, t1, t1);
             tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_EQ, t1, 0, l1);
@@ -3948,8 +3948,8 @@ static void gen_loongson_integer(DisasContext *ctx, uint32_t opc,
     case OPC_MODU_G_2E:
     case OPC_MODU_G_2F:
         {
-            int l1 = gen_new_label(tcg_ctx);
-            int l2 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l2 = gen_new_label(tcg_ctx);
             tcg_gen_ext32u_tl(tcg_ctx, t0, t0);
             tcg_gen_ext32u_tl(tcg_ctx, t1, t1);
             tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_NE, t1, 0, l1);
@@ -3976,9 +3976,9 @@ static void gen_loongson_integer(DisasContext *ctx, uint32_t opc,
     case OPC_DDIV_G_2E:
     case OPC_DDIV_G_2F:
         {
-            int l1 = gen_new_label(tcg_ctx);
-            int l2 = gen_new_label(tcg_ctx);
-            int l3 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l2 = gen_new_label(tcg_ctx);
+            TCGLabel *l3 = gen_new_label(tcg_ctx);
             tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_NE, t1, 0, l1);
             tcg_gen_movi_tl(tcg_ctx, *cpu_gpr[rd], 0);
             tcg_gen_br(tcg_ctx, l3);
@@ -3996,8 +3996,8 @@ static void gen_loongson_integer(DisasContext *ctx, uint32_t opc,
     case OPC_DDIVU_G_2E:
     case OPC_DDIVU_G_2F:
         {
-            int l1 = gen_new_label(tcg_ctx);
-            int l2 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l2 = gen_new_label(tcg_ctx);
             tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_NE, t1, 0, l1);
             tcg_gen_movi_tl(tcg_ctx, *cpu_gpr[rd], 0);
             tcg_gen_br(tcg_ctx, l2);
@@ -4010,9 +4010,9 @@ static void gen_loongson_integer(DisasContext *ctx, uint32_t opc,
     case OPC_DMOD_G_2E:
     case OPC_DMOD_G_2F:
         {
-            int l1 = gen_new_label(tcg_ctx);
-            int l2 = gen_new_label(tcg_ctx);
-            int l3 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l2 = gen_new_label(tcg_ctx);
+            TCGLabel *l3 = gen_new_label(tcg_ctx);
             tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_EQ, t1, 0, l1);
             tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_NE, t0, -1LL << 63, l2);
             tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_NE, t1, -1LL, l2);
@@ -4028,8 +4028,8 @@ static void gen_loongson_integer(DisasContext *ctx, uint32_t opc,
     case OPC_DMODU_G_2E:
     case OPC_DMODU_G_2F:
         {
-            int l1 = gen_new_label(tcg_ctx);
-            int l2 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l2 = gen_new_label(tcg_ctx);
             tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_NE, t1, 0, l1);
             tcg_gen_movi_tl(tcg_ctx, *cpu_gpr[rd], 0);
             tcg_gen_br(tcg_ctx, l2);
@@ -4246,7 +4246,7 @@ static void gen_loongson_multimedia(DisasContext *ctx, int rd, int rs, int rt)
     case OPC_DADD_CP2:
         {
             TCGv_i64 t2 = tcg_temp_new_i64(tcg_ctx);
-            int lab = gen_new_label(tcg_ctx);
+            TCGLabel *lab = gen_new_label(tcg_ctx);
 
             tcg_gen_mov_i64(tcg_ctx, t2, t0);
             tcg_gen_add_i64(tcg_ctx, t0, t1, t2);
@@ -4269,7 +4269,7 @@ static void gen_loongson_multimedia(DisasContext *ctx, int rd, int rs, int rt)
     case OPC_DSUB_CP2:
         {
             TCGv_i64 t2 = tcg_temp_new_i64(tcg_ctx);
-            int lab = gen_new_label(tcg_ctx);
+            TCGLabel *lab = gen_new_label(tcg_ctx);
 
             tcg_gen_mov_i64(tcg_ctx, t2, t0);
             tcg_gen_sub_i64(tcg_ctx, t0, t1, t2);
@@ -4381,7 +4381,7 @@ static void gen_trap (DisasContext *ctx, uint32_t opc,
             break;
         }
     } else {
-        int l1 = gen_new_label(tcg_ctx);
+        TCGLabel *l1 = gen_new_label(tcg_ctx);
 
         switch (opc) {
         case OPC_TEQ:
@@ -8489,7 +8489,7 @@ static void gen_movci (DisasContext *ctx, int rd, int rs, int cc, int tf)
 {
     TCGContext *tcg_ctx = ctx->uc->tcg_ctx;
     TCGv **cpu_gpr = (TCGv **)tcg_ctx->cpu_gpr;
-    int l1;
+    TCGLabel *l1;
     TCGCond cond;
     TCGv_i32 t0;
 
@@ -8521,7 +8521,7 @@ static inline void gen_movcf_s (DisasContext *ctx, int fs, int fd, int cc, int t
     TCGContext *tcg_ctx = ctx->uc->tcg_ctx;
     int cond;
     TCGv_i32 t0 = tcg_temp_new_i32(tcg_ctx);
-    int l1 = gen_new_label(tcg_ctx);
+    TCGLabel *l1 = gen_new_label(tcg_ctx);
 
     if (tf)
         cond = TCG_COND_EQ;
@@ -8542,7 +8542,7 @@ static inline void gen_movcf_d (DisasContext *ctx, int fs, int fd, int cc, int t
     int cond;
     TCGv_i32 t0 = tcg_temp_new_i32(tcg_ctx);
     TCGv_i64 fp0;
-    int l1 = gen_new_label(tcg_ctx);
+    TCGLabel *l1 = gen_new_label(tcg_ctx);
 
     if (tf)
         cond = TCG_COND_EQ;
@@ -8565,8 +8565,8 @@ static inline void gen_movcf_ps(DisasContext *ctx, int fs, int fd,
     TCGContext *tcg_ctx = ctx->uc->tcg_ctx;
     int cond;
     TCGv_i32 t0 = tcg_temp_new_i32(tcg_ctx);
-    int l1 = gen_new_label(tcg_ctx);
-    int l2 = gen_new_label(tcg_ctx);
+    TCGLabel *l1 = gen_new_label(tcg_ctx);
+    TCGLabel *l2 = gen_new_label(tcg_ctx);
 
     if (tf)
         cond = TCG_COND_EQ;
@@ -8935,7 +8935,7 @@ static void gen_farith (DisasContext *ctx, enum fopcode op1,
     case OPC_MOVZ_S:
         check_insn_opc_removed(ctx, ISA_MIPS32R6);
         {
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
             TCGv_i32 fp0;
 
             if (ft != 0) {
@@ -8952,7 +8952,7 @@ static void gen_farith (DisasContext *ctx, enum fopcode op1,
     case OPC_MOVN_S:
         check_insn_opc_removed(ctx, ISA_MIPS32R6);
         {
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
             TCGv_i32 fp0;
 
             if (ft != 0) {
@@ -9480,7 +9480,7 @@ static void gen_farith (DisasContext *ctx, enum fopcode op1,
     case OPC_MOVZ_D:
         check_insn_opc_removed(ctx, ISA_MIPS32R6);
         {
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
             TCGv_i64 fp0;
 
             if (ft != 0) {
@@ -9497,7 +9497,7 @@ static void gen_farith (DisasContext *ctx, enum fopcode op1,
     case OPC_MOVN_D:
         check_insn_opc_removed(ctx, ISA_MIPS32R6);
         {
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
             TCGv_i64 fp0;
 
             if (ft != 0) {
@@ -9918,7 +9918,7 @@ static void gen_farith (DisasContext *ctx, enum fopcode op1,
     case OPC_MOVZ_PS:
         check_cp1_64bitmode(ctx);
         {
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
             TCGv_i64 fp0;
 
             if (ft != 0)
@@ -9934,7 +9934,7 @@ static void gen_farith (DisasContext *ctx, enum fopcode op1,
     case OPC_MOVN_PS:
         check_cp1_64bitmode(ctx);
         {
-            int l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
             TCGv_i64 fp0;
 
             if (ft != 0) {
@@ -10281,8 +10281,8 @@ static void gen_flt3_arith (DisasContext *ctx, uint32_t opc,
             TCGv t0 = tcg_temp_local_new(tcg_ctx);
             TCGv_i32 fp = tcg_temp_new_i32(tcg_ctx);
             TCGv_i32 fph = tcg_temp_new_i32(tcg_ctx);
-            int l1 = gen_new_label(tcg_ctx);
-            int l2 = gen_new_label(tcg_ctx);
+            TCGLabel *l1 = gen_new_label(tcg_ctx);
+            TCGLabel *l2 = gen_new_label(tcg_ctx);
 
             gen_load_gpr(ctx, t0, fr);
             tcg_gen_andi_tl(tcg_ctx, t0, t0, 0x7);
@@ -10633,7 +10633,7 @@ static void gen_branch(DisasContext *ctx, int insn_bytes)
             /* Conditional branch */
             MIPS_DEBUG("conditional branch");
             {
-                int l1 = gen_new_label(tcg_ctx);
+                TCGLabel *l1 = gen_new_label(tcg_ctx);
 
                 tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_NE, *(TCGv *)tcg_ctx->bcond, 0, l1);
                 gen_goto_tb(ctx, 1, ctx->pc + insn_bytes);
@@ -16048,7 +16048,7 @@ static void gen_compute_compact_branch(DisasContext *ctx, uint32_t opc,
         gen_branch(ctx, 4);
     } else {
         /* Conditional compact branch */
-        int fs = gen_new_label(tcg_ctx);
+        TCGLabel *fs = gen_new_label(tcg_ctx);
         save_cpu_state(ctx, 0);
 
         switch (opc) {
@@ -18530,7 +18530,7 @@ static void decode_opc (CPUMIPSState *env, DisasContext *ctx, bool *insn_need_pa
 
     /* Handle blikely not taken case */
     if ((ctx->hflags & MIPS_HFLAG_BMASK_BASE) == MIPS_HFLAG_BL) {
-        int l1 = gen_new_label(tcg_ctx);
+        TCGLabel *l1 = gen_new_label(tcg_ctx);
 
         MIPS_DEBUG("blikely condition (" TARGET_FMT_lx ")", ctx->pc + 4);
         tcg_gen_brcondi_tl(tcg_ctx, TCG_COND_NE, *(TCGv *)tcg_ctx->bcond, 0, l1);
@@ -19161,7 +19161,6 @@ gen_intermediate_code_internal(MIPSCPU *cpu, TranslationBlock *tb,
     CPUMIPSState *env = &cpu->env;
     DisasContext ctx;
     target_ulong pc_start;
-    uint16_t *gen_opc_end;
     CPUBreakpoint *bp;
     int j, lj = -1;
     int num_insns;
@@ -19169,14 +19168,13 @@ gen_intermediate_code_internal(MIPSCPU *cpu, TranslationBlock *tb,
     int insn_bytes;
     int is_slot = 0;
     TCGContext *tcg_ctx = env->uc->tcg_ctx;
-    TCGArg *save_opparam_ptr = NULL;
+    int save_opparam_idx = -1;
     bool block_full = false;
 
     if (search_pc)
         qemu_log("search pc %d\n", search_pc);
 
     pc_start = tb->pc;
-    gen_opc_end = tcg_ctx->gen_opc_buf + OPC_MAX_SIZE;
     ctx.uc = env->uc;
     ctx.pc = pc_start;
     ctx.saved_pc = -1;
@@ -19217,9 +19215,10 @@ gen_intermediate_code_internal(MIPSCPU *cpu, TranslationBlock *tb,
     // Only hook this block if it is not broken from previous translation due to
     // full translation cache
     if (!env->uc->block_full && HOOK_EXISTS_BOUNDED(env->uc, UC_HOOK_BLOCK, pc_start)) {
+        int arg_i = tcg_ctx->gen_op_buf[tcg_ctx->gen_last_op_idx].args;
         // save block address to see if we need to patch block size later
         env->uc->block_addr = pc_start;
-        env->uc->size_arg = tcg_ctx->gen_opparam_buf - tcg_ctx->gen_opparam_ptr + 1;
+        env->uc->size_arg = arg_i + 1;
         gen_uc_tracecode(tcg_ctx, 0xf8f8f8f8, UC_HOOK_BLOCK_IDX, env->uc, pc_start);
     } else {
         env->uc->size_arg = -1;
@@ -19243,7 +19242,7 @@ gen_intermediate_code_internal(MIPSCPU *cpu, TranslationBlock *tb,
         }
 
         if (search_pc) {
-            j = tcg_ctx->gen_opc_ptr - tcg_ctx->gen_opc_buf;
+            j = tcg_op_buf_count(tcg_ctx);
             if (lj < j) {
                 lj++;
                 while (lj < j)
@@ -19268,8 +19267,9 @@ gen_intermediate_code_internal(MIPSCPU *cpu, TranslationBlock *tb,
             int insn_patch_offset = 1;
 
             // Unicorn: save param buffer
-            if (HOOK_EXISTS(env->uc, UC_HOOK_CODE))
-                save_opparam_ptr = tcg_ctx->gen_opparam_ptr;
+            if (HOOK_EXISTS(env->uc, UC_HOOK_CODE)) {
+                save_opparam_idx = tcg_ctx->gen_next_parm_idx;
+            }
 
             is_slot = ctx.hflags & MIPS_HFLAG_BMASK;
 
@@ -19297,7 +19297,7 @@ gen_intermediate_code_internal(MIPSCPU *cpu, TranslationBlock *tb,
                    printf("[%u] = %x\n", i, *(save_opparam_ptr + i));
                    printf("\n");
                  */
-                *(save_opparam_ptr + insn_patch_offset) = insn_bytes;
+                tcg_ctx->gen_opparam_buf[save_opparam_idx + insn_patch_offset] = insn_bytes;
             }
         }
 
@@ -19328,7 +19328,7 @@ gen_intermediate_code_internal(MIPSCPU *cpu, TranslationBlock *tb,
         if ((ctx.pc & (TARGET_PAGE_SIZE - 1)) == 0)
             break;
 
-        if (tcg_ctx->gen_opc_ptr >= gen_opc_end) {
+        if (tcg_op_buf_full(tcg_ctx)) {
             break;
         }
 
@@ -19339,7 +19339,7 @@ gen_intermediate_code_internal(MIPSCPU *cpu, TranslationBlock *tb,
         //    break;
     }
 
-    if (tcg_ctx->gen_opc_ptr >= gen_opc_end || num_insns >= max_insns) {
+    if (tcg_op_buf_full(tcg_ctx) || num_insns >= max_insns) {
         block_full = true;
     }
 
@@ -19369,9 +19369,9 @@ gen_intermediate_code_internal(MIPSCPU *cpu, TranslationBlock *tb,
     }
 done_generating:
     gen_tb_end(tcg_ctx, tb, num_insns);
-    *tcg_ctx->gen_opc_ptr = INDEX_op_end;
+
     if (search_pc) {
-        j = tcg_ctx->gen_opc_ptr - tcg_ctx->gen_opc_buf;
+        j = tcg_op_buf_count(tcg_ctx);
         lj++;
         while (lj <= j)
             tcg_ctx->gen_opc_instr_start[lj++] = 0;
@@ -19480,7 +19480,7 @@ void mips_tcg_init(struct uc_struct *uc)
     if (!uc->init_tcg) {
         for (i = 0; i < 32; i++) {
             tcg_ctx->cpu_gpr[i] = g_malloc0(sizeof(TCGv));
-            *((TCGv *)tcg_ctx->cpu_gpr[i]) = tcg_global_mem_new(tcg_ctx, TCG_AREG0,
+            *((TCGv *)tcg_ctx->cpu_gpr[i]) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env,
                     offsetof(CPUMIPSState, active_tc.gpr[i]),
                     regnames[i]);
         }
@@ -19492,28 +19492,28 @@ void mips_tcg_init(struct uc_struct *uc)
     for (i = 0; i < 32; i++) {
         int off = offsetof(CPUMIPSState, active_fpu.fpr[i].wr.d[0]);
         tcg_ctx->msa_wr_d[i * 2] =
-                tcg_global_mem_new_i64(tcg_ctx, TCG_AREG0, off, msaregnames[i * 2]);
+                tcg_global_mem_new_i64(tcg_ctx, tcg_ctx->cpu_env, off, msaregnames[i * 2]);
         /* The scalar floating-point unit (FPU) registers are mapped on
          * the MSA vector registers. */
         tcg_ctx->fpu_f64[i] = tcg_ctx->msa_wr_d[i * 2];
         off = offsetof(CPUMIPSState, active_fpu.fpr[i].wr.d[1]);
         tcg_ctx->msa_wr_d[i * 2 + 1] =
-                tcg_global_mem_new_i64(tcg_ctx, TCG_AREG0, off, msaregnames[i * 2 + 1]);
+                tcg_global_mem_new_i64(tcg_ctx, tcg_ctx->cpu_env, off, msaregnames[i * 2 + 1]);
     }
 
     if (!uc->init_tcg)
         tcg_ctx->cpu_PC = g_malloc0(sizeof(TCGv));
-    *((TCGv *)tcg_ctx->cpu_PC) = tcg_global_mem_new(tcg_ctx, TCG_AREG0,
+    *((TCGv *)tcg_ctx->cpu_PC) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env,
                                 offsetof(CPUMIPSState, active_tc.PC), "PC");
 
     if (!uc->init_tcg) {
         for (i = 0; i < MIPS_DSP_ACC; i++) {
             tcg_ctx->cpu_HI[i] = g_malloc0(sizeof(TCGv));
-            *((TCGv *)tcg_ctx->cpu_HI[i]) = tcg_global_mem_new(tcg_ctx, TCG_AREG0,
+            *((TCGv *)tcg_ctx->cpu_HI[i]) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env,
                     offsetof(CPUMIPSState, active_tc.HI[i]),
                     regnames_HI[i]);
             tcg_ctx->cpu_LO[i] = g_malloc0(sizeof(TCGv));
-            *((TCGv *)tcg_ctx->cpu_LO[i]) = tcg_global_mem_new(tcg_ctx, TCG_AREG0,
+            *((TCGv *)tcg_ctx->cpu_LO[i]) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env,
                     offsetof(CPUMIPSState, active_tc.LO[i]),
                     regnames_LO[i]);
         }
@@ -19521,27 +19521,27 @@ void mips_tcg_init(struct uc_struct *uc)
 
     if (!uc->init_tcg)
         tcg_ctx->cpu_dspctrl = g_malloc0(sizeof(TCGv));
-    *((TCGv *)tcg_ctx->cpu_dspctrl) = tcg_global_mem_new(tcg_ctx, TCG_AREG0,
+    *((TCGv *)tcg_ctx->cpu_dspctrl) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env,
                                      offsetof(CPUMIPSState, active_tc.DSPControl),
                                      "DSPControl");
 
     if (!uc->init_tcg)
         tcg_ctx->bcond = g_malloc0(sizeof(TCGv));
-    *((TCGv *)tcg_ctx->bcond) = tcg_global_mem_new(tcg_ctx, TCG_AREG0,
+    *((TCGv *)tcg_ctx->bcond) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env,
                                offsetof(CPUMIPSState, bcond), "bcond");
 
     if (!uc->init_tcg)
         tcg_ctx->btarget = g_malloc0(sizeof(TCGv));
-    *((TCGv *)tcg_ctx->btarget) = tcg_global_mem_new(tcg_ctx, TCG_AREG0,
+    *((TCGv *)tcg_ctx->btarget) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env,
                                  offsetof(CPUMIPSState, btarget), "btarget");
 
-    tcg_ctx->hflags = tcg_global_mem_new_i32(tcg_ctx, TCG_AREG0,
+    tcg_ctx->hflags = tcg_global_mem_new_i32(tcg_ctx, tcg_ctx->cpu_env,
                                     offsetof(CPUMIPSState, hflags), "hflags");
 
-    //tcg_ctx->fpu_fcr0 = tcg_global_mem_new_i32(tcg_ctx, TCG_AREG0,
+    //tcg_ctx->fpu_fcr0 = tcg_global_mem_new_i32(tcg_ctx, tcg_ctx->cpu_env,
     //                                  offsetof(CPUMIPSState, active_fpu.fcr0),
     //                                  "fcr0");
-    tcg_ctx->fpu_fcr31 = tcg_global_mem_new_i32(tcg_ctx, TCG_AREG0,
+    tcg_ctx->fpu_fcr31 = tcg_global_mem_new_i32(tcg_ctx, tcg_ctx->cpu_env,
                                        offsetof(CPUMIPSState, active_fpu.fcr31),
                                        "fcr31");
     uc->init_tcg = true;

@@ -49,21 +49,21 @@ void m68k_tcg_init(struct uc_struct *uc)
     char *p;
     int i;
 
-#define DEFO32(name,  offset) if (!uc->init_tcg) { tcg_ctx->QREG_##name = g_malloc0(sizeof(TCGv));} *((TCGv *)tcg_ctx->QREG_##name) = tcg_global_mem_new_i32(tcg_ctx, TCG_AREG0, offsetof(CPUM68KState, offset), #name);
-#define DEFO64(name,  offset) tcg_ctx->QREG_##name = tcg_global_mem_new_i64(tcg_ctx, TCG_AREG0, offsetof(CPUM68KState, offset), #name);
+    tcg_ctx->cpu_env = tcg_global_reg_new_ptr(tcg_ctx, TCG_AREG0, "env");
+
+#define DEFO32(name,  offset) if (!uc->init_tcg) { tcg_ctx->QREG_##name = g_malloc0(sizeof(TCGv));} *((TCGv *)tcg_ctx->QREG_##name) = tcg_global_mem_new_i32(tcg_ctx, tcg_ctx->cpu_env, offsetof(CPUM68KState, offset), #name);
+#define DEFO64(name,  offset) tcg_ctx->QREG_##name = tcg_global_mem_new_i64(tcg_ctx, tcg_ctx->cpu_env, offsetof(CPUM68KState, offset), #name);
 #define DEFF64(name,  offset) DEFO64(name, offset)
 #include "qregs.def"
 #undef DEFO32
 #undef DEFO64
 #undef DEFF64
 
-    // tcg_ctx->QREG_FP_RESULT = tcg_global_mem_new_i64(tcg_ctx, TCG_AREG0, offsetof(CPUM68KState, fp_result), "FP_RESULT");
+    // tcg_ctx->QREG_FP_RESULT = tcg_global_mem_new_i64(tcg_ctx, tcg_ctx->cpu_env, offsetof(CPUM68KState, fp_result), "FP_RESULT");
 
-    tcg_ctx->cpu_halted = tcg_global_mem_new_i32(tcg_ctx, TCG_AREG0,
+    tcg_ctx->cpu_halted = tcg_global_mem_new_i32(tcg_ctx, tcg_ctx->cpu_env,
                                         0-offsetof(M68kCPU, env) +
                                         offsetof(CPUState, halted), "HALTED");
-
-    tcg_ctx->cpu_env = tcg_global_reg_new_ptr(tcg_ctx, TCG_AREG0, "env");
 
     p = tcg_ctx->cpu_reg_names;
 
@@ -71,35 +71,35 @@ void m68k_tcg_init(struct uc_struct *uc)
         sprintf(p, "D%d", i);
         if (!uc->init_tcg)
             tcg_ctx->cpu_dregs[i] = g_malloc0(sizeof(TCGv));
-        *((TCGv *)tcg_ctx->cpu_dregs[i]) = tcg_global_mem_new(tcg_ctx, TCG_AREG0,
+        *((TCGv *)tcg_ctx->cpu_dregs[i]) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env,
                 offsetof(CPUM68KState, dregs[i]), p);
         p += 3;
         sprintf(p, "A%d", i);
         if (!uc->init_tcg)
             tcg_ctx->cpu_aregs[i] = g_malloc0(sizeof(TCGv));
-        *((TCGv *)tcg_ctx->cpu_aregs[i]) = tcg_global_mem_new(tcg_ctx, TCG_AREG0,
+        *((TCGv *)tcg_ctx->cpu_aregs[i]) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env,
                 offsetof(CPUM68KState, aregs[i]), p);
         p += 3;
         sprintf(p, "F%d", i);
-        tcg_ctx->cpu_fregs[i] = tcg_global_mem_new_i64(tcg_ctx, TCG_AREG0,
+        tcg_ctx->cpu_fregs[i] = tcg_global_mem_new_i64(tcg_ctx, tcg_ctx->cpu_env,
                 offsetof(CPUM68KState, fregs[i]), p);
         p += 3;
     }
 
     for (i = 0; i < 4; i++) {
         sprintf(p, "ACC%d", i);
-        tcg_ctx->cpu_macc[i] = tcg_global_mem_new_i64(tcg_ctx, TCG_AREG0,
+        tcg_ctx->cpu_macc[i] = tcg_global_mem_new_i64(tcg_ctx, tcg_ctx->cpu_env,
                                          offsetof(CPUM68KState, macc[i]), p);
         p += 5;
     }
 
     if (!uc->init_tcg)
         tcg_ctx->NULL_QREG = g_malloc0(sizeof(TCGv));
-    *((TCGv *)tcg_ctx->NULL_QREG) = tcg_global_mem_new(tcg_ctx, TCG_AREG0, -4, "NULL");
+    *((TCGv *)tcg_ctx->NULL_QREG) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env, -4, "NULL");
 
     if (!uc->init_tcg)
         tcg_ctx->store_dummy = g_malloc0(sizeof(TCGv));
-    *((TCGv *)tcg_ctx->store_dummy) = tcg_global_mem_new(tcg_ctx, TCG_AREG0, -8, "NULL");
+    *((TCGv *)tcg_ctx->store_dummy) = tcg_global_mem_new(tcg_ctx, tcg_ctx->cpu_env, -8, "NULL");
 
     uc->init_tcg = true;
 }
@@ -676,7 +676,7 @@ static TCGv gen_ea(CPUM68KState *env, DisasContext *s, uint16_t insn,
 }
 
 /* This generates a conditional branch, clobbering all temporaries.  */
-static void gen_jmpcc(DisasContext *s, int cond, int l1)
+static void gen_jmpcc(DisasContext *s, int cond, TCGLabel *l1)
 {
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
     TCGv tmp;
@@ -783,7 +783,7 @@ static void gen_jmpcc(DisasContext *s, int cond, int l1)
 DISAS_INSN(scc)
 {
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
-    int l1;
+    TCGLabel *l1;
     int cond;
     TCGv reg;
 
@@ -1696,7 +1696,7 @@ DISAS_INSN(branch)
     int32_t offset;
     uint32_t base;
     int op;
-    int l1;
+    TCGLabel *l1;
 
     base = s->pc;
     op = (insn >> 8) & 0xf;
@@ -2454,7 +2454,7 @@ DISAS_INSN(fbcc)
     uint32_t offset;
     uint32_t addr;
     TCGv flag;
-    int l1;
+    TCGLabel *l1;
 
     addr = s->pc;
     offset = cpu_ldsw_code(env, s->pc);
@@ -3066,7 +3066,6 @@ gen_intermediate_code_internal(M68kCPU *cpu, TranslationBlock *tb,
     CPUState *cs = CPU(cpu);
     CPUM68KState *env = &cpu->env;
     DisasContext dc1, *dc = &dc1;
-    uint16_t *gen_opc_end;
     CPUBreakpoint *bp;
     int j, lj;
     target_ulong pc_start;
@@ -3081,8 +3080,6 @@ gen_intermediate_code_internal(M68kCPU *cpu, TranslationBlock *tb,
 
     dc->tb = tb;
     dc->uc = env->uc;
-
-    gen_opc_end = tcg_ctx->gen_opc_buf + OPC_MAX_SIZE;
 
     dc->env = env;
     dc->is_jmp = DISAS_NEXT;
@@ -3112,7 +3109,7 @@ gen_intermediate_code_internal(M68kCPU *cpu, TranslationBlock *tb,
     if (!env->uc->block_full && HOOK_EXISTS_BOUNDED(env->uc, UC_HOOK_BLOCK, pc_start)) {
         // save block address to see if we need to patch block size later
         env->uc->block_addr = pc_start;
-        env->uc->size_arg = tcg_ctx->gen_opparam_buf - tcg_ctx->gen_opparam_ptr + 1;
+        env->uc->size_arg = tcg_ctx->gen_op_buf[tcg_ctx->gen_last_op_idx].args;
         gen_uc_tracecode(tcg_ctx, 0xf8f8f8f8, UC_HOOK_BLOCK_IDX, env->uc, pc_start);
     } else {
         env->uc->size_arg = -1;
@@ -3133,7 +3130,7 @@ gen_intermediate_code_internal(M68kCPU *cpu, TranslationBlock *tb,
                 break;
         }
         if (search_pc) {
-            j = tcg_ctx->gen_opc_ptr - tcg_ctx->gen_opc_buf;
+            j = tcg_op_buf_count(tcg_ctx);
             if (lj < j) {
                 lj++;
                 while (lj < j)
@@ -3148,13 +3145,13 @@ gen_intermediate_code_internal(M68kCPU *cpu, TranslationBlock *tb,
         dc->insn_pc = dc->pc;
         disas_m68k_insn(env, dc);
         num_insns++;
-    } while (!dc->is_jmp && tcg_ctx->gen_opc_ptr < gen_opc_end &&
+    } while (!dc->is_jmp && !tcg_op_buf_full(tcg_ctx) &&
             !cs->singlestep_enabled &&
             (pc_offset) < (TARGET_PAGE_SIZE - 32) &&
             num_insns < max_insns);
 
     /* if too long translation, save this info */
-    if (tcg_ctx->gen_opc_ptr >= gen_opc_end || num_insns >= max_insns)
+    if (tcg_op_buf_full(tcg_ctx) || num_insns >= max_insns)
         block_full = true;
 
     //if (tb->cflags & CF_LAST_IO)
@@ -3187,10 +3184,9 @@ gen_intermediate_code_internal(M68kCPU *cpu, TranslationBlock *tb,
 
 done_generating:
     gen_tb_end(tcg_ctx, tb, num_insns);
-    *tcg_ctx->gen_opc_ptr = INDEX_op_end;
 
     if (search_pc) {
-        j = tcg_ctx->gen_opc_ptr - tcg_ctx->gen_opc_buf;
+        j = tcg_op_buf_count(tcg_ctx);
         lj++;
         while (lj <= j)
             tcg_ctx->gen_opc_instr_start[lj++] = 0;

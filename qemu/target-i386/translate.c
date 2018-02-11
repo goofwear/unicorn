@@ -736,7 +736,7 @@ static void gen_exts(TCGContext *s, TCGMemOp ot, TCGv reg)
     gen_ext_tl(s, reg, reg, ot, true);
 }
 
-static inline void gen_op_jnz_ecx(TCGContext *s, TCGMemOp size, int label1)
+static inline void gen_op_jnz_ecx(TCGContext *s, TCGMemOp size, TCGLabel *label1)
 {
     TCGv cpu_tmp0 = *(TCGv *)s->cpu_tmp0;
     TCGv **cpu_regs = (TCGv **)s->cpu_regs;
@@ -746,7 +746,7 @@ static inline void gen_op_jnz_ecx(TCGContext *s, TCGMemOp size, int label1)
     tcg_gen_brcondi_tl(s, TCG_COND_NE, cpu_tmp0, 0, label1);
 }
 
-static inline void gen_op_jz_ecx(TCGContext *s, TCGMemOp size, int label1)
+static inline void gen_op_jz_ecx(TCGContext *s, TCGMemOp size, TCGLabel *label1)
 {
     TCGv cpu_tmp0 = *(TCGv *)s->cpu_tmp0;
     TCGv **cpu_regs = (TCGv **)s->cpu_regs;
@@ -1262,7 +1262,7 @@ static inline void gen_compute_eflags_c(DisasContext *s, TCGv reg)
 
 /* generate a conditional jump to label 'l1' according to jump opcode
    value 'b'. In the fast case, T0 is guaranted not to be used. */
-static inline void gen_jcc1_noeob(DisasContext *s, int b, int l1)
+static inline void gen_jcc1_noeob(DisasContext *s, int b, TCGLabel *l1)
 {
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
     TCGv **cpu_T = (TCGv **)tcg_ctx->cpu_T;
@@ -1282,7 +1282,7 @@ static inline void gen_jcc1_noeob(DisasContext *s, int b, int l1)
 /* Generate a conditional jump to label 'l1' according to jump opcode
    value 'b'. In the fast case, T0 is guaranted not to be used.
    A translation block must end soon.  */
-static inline void gen_jcc1(DisasContext *s, int b, int l1)
+static inline void gen_jcc1(DisasContext *s, int b, TCGLabel *l1)
 {
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
     TCGv **cpu_T = (TCGv **)tcg_ctx->cpu_T;
@@ -1303,13 +1303,12 @@ static inline void gen_jcc1(DisasContext *s, int b, int l1)
 
 /* XXX: does not work with gdbstub "ice" single step - not a
    serious problem */
-static int gen_jz_ecx_string(DisasContext *s, target_ulong next_eip)
+static TCGLabel *gen_jz_ecx_string(DisasContext *s, target_ulong next_eip)
 {
-    int l1, l2;
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
 
-    l1 = gen_new_label(tcg_ctx);
-    l2 = gen_new_label(tcg_ctx);
+    TCGLabel *l1 = gen_new_label(tcg_ctx);
+    TCGLabel *l2 = gen_new_label(tcg_ctx);
     gen_op_jnz_ecx(tcg_ctx, s->aflag, l1);
     gen_set_label(tcg_ctx, l2);
     gen_jmp_tb(s, next_eip, 1);
@@ -1419,7 +1418,7 @@ static inline void gen_outs(DisasContext *s, TCGMemOp ot)
 static inline void gen_repz_ ## op(DisasContext *s, TCGMemOp ot,              \
                                  target_ulong cur_eip, target_ulong next_eip) \
 {                                                                             \
-    int l2;\
+    TCGLabel *l2;                                                             \
     gen_update_cc_op(s);                                                      \
     l2 = gen_jz_ecx_string(s, next_eip);                                      \
     gen_ ## op(s, ot);                                                        \
@@ -1437,7 +1436,7 @@ static inline void gen_repz_ ## op(DisasContext *s, TCGMemOp ot,              \
                                    target_ulong next_eip,                     \
                                    int nz)                                    \
 {                                                                             \
-    int l2;\
+    TCGLabel *l2;                                                             \
     gen_update_cc_op(s);                                                      \
     l2 = gen_jz_ecx_string(s, next_eip);                                      \
     gen_ ## op(s, ot);                                                        \
@@ -2505,7 +2504,7 @@ static inline void gen_goto_tb(DisasContext *s, int tb_num, target_ulong eip)
 static inline void gen_jcc(DisasContext *s, int b,
                            target_ulong val, target_ulong next_eip)
 {
-    int l1, l2;
+    TCGLabel *l1, *l2;
     TCGContext *tcg_ctx = s->uc->tcg_ctx;
 
     if (s->jmp_opt) {
@@ -5003,7 +5002,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     TCGv cpu_tmp4 = *(TCGv *)tcg_ctx->cpu_tmp4;
     TCGv **cpu_T = (TCGv **)tcg_ctx->cpu_T;
     TCGv **cpu_regs = (TCGv **)tcg_ctx->cpu_regs;
-    TCGArg *save_opparam_ptr = tcg_ctx->gen_opparam_ptr;
+    TCGArg* save_opparam_ptr = tcg_ctx->gen_opparam_buf + tcg_ctx->gen_op_buf[tcg_ctx->gen_last_op_idx].args;
     bool cc_op_dirty = s->cc_op_dirty;
     bool changed_cc_op = false;
 
@@ -5787,7 +5786,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0x1b0:
     case 0x1b1: /* cmpxchg Ev, Gv */
         {
-            int label1, label2;
+            TCGLabel *label1, *label2;
             TCGv t0, t1, t2, a0;
 
             ot = mo_b_d(b, dflag);
@@ -6865,7 +6864,8 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             case 0x10: case 0x11: case 0x12: case 0x13: /* fcmovxx */
             case 0x18: case 0x19: case 0x1a: case 0x1b:
                 {
-                    int op1, l1;
+                    int op1;
+                    TCGLabel *l1;
                     static const uint8_t fcmov_cc[8] = {
                         (JCC_B << 1),
                         (JCC_Z << 1),
@@ -7662,7 +7662,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0xe2: /* loop */
     case 0xe3: /* jecxz */
         {
-            int l1, l2, l3;
+            TCGLabel *l1, *l2, *l3;
 
             tval = (int8_t)insn_get(env, s, MO_8);
             next_eip = s->pc - s->cs_base;
@@ -8147,7 +8147,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
         } else
 #endif
         {
-            int label1;
+            TCGLabel *label1;
             TCGv t0, t1, t2, a0;
 
             if (!s->pe || s->vm86)
@@ -8196,7 +8196,7 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0x102: /* lar */
     case 0x103: /* lsl */
         {
-            int label1;
+            TCGLabel *label1;
             TCGv t0;
             if (!s->pe || s->vm86)
                 goto illegal_op;
@@ -8556,23 +8556,23 @@ void optimize_flags_init(struct uc_struct *uc)
     TCGContext *tcg_ctx = uc->tcg_ctx;
 
     tcg_ctx->cpu_env = tcg_global_reg_new_ptr(uc->tcg_ctx, TCG_AREG0, "env");
-    tcg_ctx->cpu_cc_op = tcg_global_mem_new_i32(uc->tcg_ctx, TCG_AREG0,
+    tcg_ctx->cpu_cc_op = tcg_global_mem_new_i32(uc->tcg_ctx, tcg_ctx->cpu_env,
                                        offsetof(CPUX86State, cc_op), "cc_op");
     tcg_ctx->cpu_cc_dst = g_malloc0(sizeof(TCGv));
-    *((TCGv *)tcg_ctx->cpu_cc_dst) = tcg_global_mem_new(uc->tcg_ctx, TCG_AREG0,
+    *((TCGv *)tcg_ctx->cpu_cc_dst) = tcg_global_mem_new(uc->tcg_ctx, tcg_ctx->cpu_env,
             offsetof(CPUX86State, cc_dst), "cc_dst");
 
     tcg_ctx->cpu_cc_src = g_malloc0(sizeof(TCGv));
-    *((TCGv *)tcg_ctx->cpu_cc_src) = tcg_global_mem_new(uc->tcg_ctx, TCG_AREG0,
+    *((TCGv *)tcg_ctx->cpu_cc_src) = tcg_global_mem_new(uc->tcg_ctx, tcg_ctx->cpu_env,
             offsetof(CPUX86State, cc_src), "cc_src");
 
     tcg_ctx->cpu_cc_src2 = g_malloc0(sizeof(TCGv));
-    *((TCGv *)tcg_ctx->cpu_cc_src2) = tcg_global_mem_new(uc->tcg_ctx, TCG_AREG0,
+    *((TCGv *)tcg_ctx->cpu_cc_src2) = tcg_global_mem_new(uc->tcg_ctx, tcg_ctx->cpu_env,
             offsetof(CPUX86State, cc_src2), "cc_src2");
 
     for (i = 0; i < CPU_NB_REGS; ++i) {
         tcg_ctx->cpu_regs[i] = g_malloc0(sizeof(TCGv));
-        *((TCGv *)tcg_ctx->cpu_regs[i]) = tcg_global_mem_new(uc->tcg_ctx, TCG_AREG0,
+        *((TCGv *)tcg_ctx->cpu_regs[i]) = tcg_global_mem_new(uc->tcg_ctx, tcg_ctx->cpu_env,
                 offsetof(CPUX86State, regs[i]),
                 reg_names[i]);
     }
@@ -8591,7 +8591,6 @@ static inline void gen_intermediate_code_internal(uint8_t *gen_opc_cc_op,
     TCGContext *tcg_ctx = env->uc->tcg_ctx;
     DisasContext dc1, *dc = &dc1;
     target_ulong pc_ptr;
-    uint16_t *gen_opc_end;
     CPUBreakpoint *bp;
     int j, lj;
     uint64_t flags;
@@ -8694,8 +8693,6 @@ static inline void gen_intermediate_code_internal(uint8_t *gen_opc_cc_op,
         goto done_generating;
     }
 
-    gen_opc_end = tcg_ctx->gen_opc_buf + OPC_MAX_SIZE;
-
     dc->is_jmp = DISAS_NEXT;
     lj = -1;
     max_insns = tb->cflags & CF_COUNT_MASK;
@@ -8705,8 +8702,9 @@ static inline void gen_intermediate_code_internal(uint8_t *gen_opc_cc_op,
     // Unicorn: trace this block on request
     // Only hook this block if the previous block was not truncated due to space
     if (!env->uc->block_full && HOOK_EXISTS_BOUNDED(env->uc, UC_HOOK_BLOCK, pc_start)) {
+        int arg_i = tcg_ctx->gen_op_buf[tcg_ctx->gen_last_op_idx].args;
         env->uc->block_addr = pc_start;
-        env->uc->size_arg = tcg_ctx->gen_opparam_buf - tcg_ctx->gen_opparam_ptr + 1;
+        env->uc->size_arg = arg_i + 1;
         gen_uc_tracecode(tcg_ctx, 0xf8f8f8f8, UC_HOOK_BLOCK_IDX, env->uc, pc_start);
     } else {
         env->uc->size_arg = -1;
@@ -8724,7 +8722,7 @@ static inline void gen_intermediate_code_internal(uint8_t *gen_opc_cc_op,
             }
         }
         if (search_pc) {
-            j = tcg_ctx->gen_opc_ptr - tcg_ctx->gen_opc_buf;
+            j = tcg_op_buf_count(tcg_ctx);
             if (lj < j) {
                 lj++;
                 while (lj < j)
@@ -8757,7 +8755,7 @@ static inline void gen_intermediate_code_internal(uint8_t *gen_opc_cc_op,
             break;
         }
         /* if too long translation, stop generation too */
-        if (tcg_ctx->gen_opc_ptr >= gen_opc_end ||
+        if (tcg_op_buf_full(tcg_ctx) ||
             (pc_ptr - pc_start) >= (TARGET_PAGE_SIZE - 32) ||
             num_insns >= max_insns) {
             gen_jmp_im(dc, pc_ptr - dc->cs_base);
@@ -8770,10 +8768,10 @@ static inline void gen_intermediate_code_internal(uint8_t *gen_opc_cc_op,
     //    gen_io_end();
 done_generating:
     gen_tb_end(tcg_ctx, tb, num_insns);
-    *tcg_ctx->gen_opc_ptr = INDEX_op_end;
+
     /* we don't forget to fill the last values */
     if (search_pc) {
-        j = tcg_ctx->gen_opc_ptr - tcg_ctx->gen_opc_buf;
+        j = tcg_op_buf_count(tcg_ctx);
         lj++;
         while (lj <= j)
             tcg_ctx->gen_opc_instr_start[lj++] = 0;

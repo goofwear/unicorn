@@ -170,7 +170,8 @@ typedef struct TCGRelocation {
 } TCGRelocation; 
 
 typedef struct TCGLabel {
-    int has_value;
+    unsigned has_value : 1;
+    unsigned id : 31;
     union {
         uintptr_t value;
         tcg_insn_unit *value_ptr;
@@ -185,8 +186,6 @@ typedef struct TCGPool {
 } TCGPool;
 
 #define TCG_POOL_CHUNK_SIZE 32768
-
-#define TCG_MAX_LABELS 512
 
 #define TCG_MAX_TEMPS 512
 
@@ -433,7 +432,7 @@ typedef struct TCGTemp {
     int val_type;
     int reg;
     tcg_target_long val;
-    int mem_reg;
+    struct TCGTemp *mem_base;
     intptr_t mem_offset;
     unsigned int fixed_reg:1;
     unsigned int mem_coherent:1;
@@ -451,6 +450,24 @@ typedef struct TCGTempSet {
     unsigned long l[BITS_TO_LONGS(TCG_MAX_TEMPS)];
 } TCGTempSet;
 
+typedef struct TCGOp {
+    TCGOpcode opc   : 8;
+
+    /* The number of out and in parameter for a call.  */
+    unsigned callo  : 2;
+    unsigned calli  : 6;
+
+    /* Index of the arguments for this op, or -1 for zero-operand ops.  */
+    signed args     : 16;
+
+    /* Index of the prex/next op, or -1 for the end of the list.  */
+    signed prev     : 16;
+    signed next     : 16;
+} TCGOp;
+
+QEMU_BUILD_BUG_ON(NB_OPS > 0xff);
+QEMU_BUILD_BUG_ON(OPC_BUF_SIZE >= 0x7fff);
+QEMU_BUILD_BUG_ON(OPPARAM_BUF_SIZE >= 0x7fff);
 
 /* pool based memory allocation */
 
@@ -469,33 +486,53 @@ int tcg_gen_code_search_pc(TCGContext *s, tcg_insn_unit *gen_code_buf,
 
 void tcg_set_frame(TCGContext *s, int reg, intptr_t start, intptr_t size);
 
+int tcg_global_mem_new_internal(TCGContext *s, TCGType type, TCGv_ptr base, intptr_t offset, const char *name);
+
 TCGv_i32 tcg_global_reg_new_i32(TCGContext *s, int reg, const char *name);
-TCGv_i32 tcg_global_mem_new_i32(TCGContext *s, int reg, intptr_t offset, const char *name);
+TCGv_i64 tcg_global_reg_new_i64(TCGContext *s, int reg, const char *name);
+
 TCGv_i32 tcg_temp_new_internal_i32(TCGContext *s, int temp_local);
+TCGv_i64 tcg_temp_new_internal_i64(TCGContext *s, int temp_local);
+
+void tcg_temp_free_i32(TCGContext *s, TCGv_i32 arg);
+void tcg_temp_free_i64(TCGContext *s, TCGv_i64 arg);
+
+char *tcg_get_arg_str_i32(TCGContext *s, char *buf, int buf_size, TCGv_i32 arg);
+char *tcg_get_arg_str_i64(TCGContext *s, char *buf, int buf_size, TCGv_i64 arg);
+
+static inline TCGv_i32 tcg_global_mem_new_i32(TCGContext *s, TCGv_ptr reg,
+                                              intptr_t offset, const char *name)
+{
+    int idx = tcg_global_mem_new_internal(s, TCG_TYPE_I32, reg, offset, name);
+    return MAKE_TCGV_I32(idx);
+}
+
 static inline TCGv_i32 tcg_temp_new_i32(TCGContext *s)
 {
     return tcg_temp_new_internal_i32(s, 0);
 }
+
 static inline TCGv_i32 tcg_temp_local_new_i32(TCGContext *s)
 {
     return tcg_temp_new_internal_i32(s, 1);
 }
-void tcg_temp_free_i32(TCGContext *s, TCGv_i32 arg);
-char *tcg_get_arg_str_i32(TCGContext *s, char *buf, int buf_size, TCGv_i32 arg);
 
-TCGv_i64 tcg_global_reg_new_i64(TCGContext *s, int reg, const char *name);
-TCGv_i64 tcg_global_mem_new_i64(TCGContext *s, int reg, intptr_t offset, const char *name);
-TCGv_i64 tcg_temp_new_internal_i64(TCGContext *s, int temp_local);
+static inline TCGv_i64 tcg_global_mem_new_i64(TCGContext *s, TCGv_ptr reg,
+                                              intptr_t offset, const char *name)
+{
+    int idx = tcg_global_mem_new_internal(s, TCG_TYPE_I64, reg, offset, name);
+    return MAKE_TCGV_I64(idx);
+}
+
 static inline TCGv_i64 tcg_temp_new_i64(TCGContext *s)
 {
     return tcg_temp_new_internal_i64(s, 0);
 }
+
 static inline TCGv_i64 tcg_temp_local_new_i64(TCGContext *s)
 {
     return tcg_temp_new_internal_i64(s, 1);
 }
-void tcg_temp_free_i64(TCGContext *s, TCGv_i64 arg);
-char *tcg_get_arg_str_i64(TCGContext *s, char *buf, int buf_size, TCGv_i64 arg);
 
 #if defined(CONFIG_DEBUG_TCG)
 /* If you call tcg_clear_temp_count() at the start of a section of
@@ -571,7 +608,6 @@ struct tcg_temp_info {
 struct TCGContext {
     uint8_t *pool_cur, *pool_end;
     TCGPool *pool_first, *pool_current, *pool_first_large;
-    TCGLabel *labels;
     int nb_labels;
     int nb_globals;
     int nb_temps;
@@ -588,19 +624,14 @@ struct TCGContext {
     uint8_t *op_sync_args;  /* for each operation, each bit tells if the
                                corresponding output argument needs to be
                                sync to memory. */
-    
-    /* tells in which temporary a given register is. It does not take
-       into account fixed registers */
-    int reg_to_temp[TCG_TARGET_NB_REGS];
+
     TCGRegSet reserved_regs;
     intptr_t current_frame_offset;
     intptr_t frame_start;
     intptr_t frame_end;
-    int frame_reg;
+    TCGTemp *frame_temp;
 
     tcg_insn_unit *code_ptr;
-    TCGTemp temps[TCG_MAX_TEMPS]; /* globals first, temps after */
-    TCGTempSet free_temps[TCG_TYPE_COUNT * 2];
 
     GHashTable *helpers;
 
@@ -628,14 +659,10 @@ struct TCGContext {
     int goto_tb_issue_mask;
 #endif
 
-    uint16_t gen_opc_buf[OPC_BUF_SIZE];
-    TCGArg gen_opparam_buf[OPPARAM_BUF_SIZE];
-
-    uint16_t *gen_opc_ptr;
-    TCGArg *gen_opparam_ptr;
-    target_ulong gen_opc_pc[OPC_BUF_SIZE];
-    uint16_t gen_opc_icount[OPC_BUF_SIZE];
-    uint8_t gen_opc_instr_start[OPC_BUF_SIZE];
+    int gen_first_op_idx;
+    int gen_last_op_idx;
+    int gen_next_op_idx;
+    int gen_next_parm_idx;
 
     /* Code generation.  Note that we specifically do not use tcg_insn_unit
        here, because there's too much arithmetic throughout that relies
@@ -653,6 +680,20 @@ struct TCGContext {
 
     /* The TCGBackendData structure is private to tcg-target.c.  */
     struct TCGBackendData *be;
+
+    TCGTempSet free_temps[TCG_TYPE_COUNT * 2];
+    TCGTemp temps[TCG_MAX_TEMPS]; /* globals first, temps after */
+
+    /* tells in which temporary a given register is. It does not take
+       into account fixed registers */
+    int reg_to_temp[TCG_TARGET_NB_REGS];
+
+    TCGOp gen_op_buf[OPC_BUF_SIZE];
+    TCGArg gen_opparam_buf[OPPARAM_BUF_SIZE];
+
+    target_ulong gen_opc_pc[OPC_BUF_SIZE];
+    uint16_t gen_opc_icount[OPC_BUF_SIZE];
+    uint8_t gen_opc_instr_start[OPC_BUF_SIZE];
 
     // Unicorn engine variables
     struct uc_struct *uc;
@@ -758,8 +799,20 @@ struct TCGContext {
     void *cpu_hintp, *cpu_htba, *cpu_hver, *cpu_ssr, *cpu_ver;
     void *cpu_wim;
 
-    int exitreq_label;  // gen_tb_start()
+    TCGLabel *exitreq_label;  // gen_tb_start()
 };
+
+/* The number of opcodes emitted so far.  */
+static inline int tcg_op_buf_count(TCGContext *tcg_ctx)
+{
+    return tcg_ctx->gen_next_op_idx;
+}
+
+/* Test for whether to terminate the TB for using too many opcodes.  */
+static inline bool tcg_op_buf_full(TCGContext *tcg_ctx)
+{
+    return tcg_op_buf_count(tcg_ctx) >= OPC_MAX_SIZE;
+}
 
 typedef struct TCGTargetOpDef {
     TCGOpcode op;
@@ -810,11 +863,8 @@ void tcg_add_target_add_op_defs(TCGContext *s, const TCGTargetOpDef *tdefs);
 void tcg_gen_callN(TCGContext *s, void *func,
                    TCGArg ret, int nargs, TCGArg *args);
 
-void tcg_gen_shifti_i64(TCGContext *s, TCGv_i64 ret, TCGv_i64 arg1,
-                        int c, int right, int arith);
-
-TCGArg *tcg_optimize(TCGContext *s, uint16_t *tcg_opc_ptr, TCGArg *args,
-                     TCGOpDef *tcg_op_def);
+void tcg_op_remove(TCGContext *s, TCGOp *op);
+void tcg_optimize(TCGContext *s);
 
 static inline void *tcg_malloc(TCGContext *s, int size)
 {
@@ -838,6 +888,33 @@ TCGv_i32 tcg_const_i32(TCGContext *s, int32_t val);
 TCGv_i64 tcg_const_i64(TCGContext *s, int64_t val);
 TCGv_i32 tcg_const_local_i32(TCGContext *s, int32_t val);
 TCGv_i64 tcg_const_local_i64(TCGContext *s, int64_t val);
+
+TCGLabel *gen_new_label(TCGContext* s);
+
+/**
+ * label_arg
+ * @l: label
+ *
+ * Encode a label for storage in the TCG opcode stream.
+ */
+
+static inline TCGArg label_arg(TCGContext *tcg_ctx, TCGLabel *l)
+{
+    return (uintptr_t)l;
+}
+
+/**
+ * arg_label
+ * @i: value
+ *
+ * The opposite of label_arg.  Retrieve a label from the
+ * encoding of the TCG opcode stream.
+ */
+
+static inline TCGLabel *arg_label(TCGContext *tcg_ctx, TCGArg i)
+{
+    return (TCGLabel *)(uintptr_t)i;
+}
 
 /**
  * tcg_ptr_byte_diff
@@ -882,6 +959,44 @@ static inline ptrdiff_t tcg_pcrel_diff(TCGContext *s, void *target)
 static inline size_t tcg_current_code_size(TCGContext *s)
 {
     return tcg_ptr_byte_diff(s->code_ptr, s->code_buf);
+}
+
+/* Combine the TCGMemOp and mmu_idx parameters into a single value.  */
+typedef uint32_t TCGMemOpIdx;
+
+/**
+ * make_memop_idx
+ * @op: memory operation
+ * @idx: mmu index
+ *
+ * Encode these values into a single parameter.
+ */
+static inline TCGMemOpIdx make_memop_idx(TCGMemOp op, unsigned idx)
+{
+    tcg_debug_assert(idx <= 15);
+    return (op << 4) | idx;
+}
+
+/**
+ * get_memop
+ * @oi: combined op/idx parameter
+ *
+ * Extract the memory operation from the combined value.
+ */
+static inline TCGMemOp get_memop(TCGMemOpIdx oi)
+{
+    return oi >> 4;
+}
+
+/**
+ * get_mmuidx
+ * @oi: combined op/idx parameter
+ *
+ * Extract the mmu index from the combined value.
+ */
+static inline unsigned get_mmuidx(TCGMemOpIdx oi)
+{
+    return oi & 15;
 }
 
 /**
@@ -1004,8 +1119,6 @@ void helper_be_stq_mmu(CPUArchState *env, target_ulong addr, uint64_t val,
 # define helper_ret_stl_mmu   helper_le_stl_mmu
 # define helper_ret_stq_mmu   helper_le_stq_mmu
 #endif
-
-void check_exit_request(TCGContext *tcg_ctx);
 
 #endif /* CONFIG_SOFTMMU */
 
