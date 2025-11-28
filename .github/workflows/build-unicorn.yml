@@ -1,0 +1,38 @@
+name: Build Unicorn (ARM + AArch64)
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout unicorn
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential python2 python-is-python2 \
+          libglib2.0-dev libpixman-1-dev
+        ls -al
+
+    - name: Build Unicorn
+      run: |
+        export UNICORN_QEMU_FLAGS="--python=python2"
+        export UNICORN_ARCHS="arm aarch64"
+        chmod +x make.sh
+        ./make.sh
+
+    - name: Archive Build Output
+      run: |
+        mkdir -p artifacts
+        cp -r lib include unicorn artifacts/
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: unicorn-build
+        path: artifacts
